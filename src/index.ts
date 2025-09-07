@@ -31,22 +31,50 @@ app.use(cookieParser());
 // Create HTTP server
 const server = createServer(app);
 
-// Register services
-Container.set('GOOGLE_API_KEY', process.env.GOOGLE_API_KEY!);
-Container.set(UserService, new UserService());
-Container.set(GeminiService, new GeminiService(process.env.GOOGLE_API_KEY!));
-Container.set(ArticleService, new ArticleService(Container.get(GeminiService)));
+// Add health check endpoint for Railway
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Basic endpoint to test server
+app.get('/', (req, res) => {
+  res.json({ message: 'NewsBridge Backend API', status: 'running' });
+});
+
+// Validate required environment variables
+if (!process.env.GOOGLE_API_KEY) {
+  console.error('GOOGLE_API_KEY environment variable is required');
+  process.exit(1);
+}
+
+// Register services with error handling
+try {
+  Container.set('GOOGLE_API_KEY', process.env.GOOGLE_API_KEY!);
+  Container.set(UserService, new UserService());
+  Container.set(GeminiService, new GeminiService(process.env.GOOGLE_API_KEY!));
+  Container.set(ArticleService, new ArticleService(Container.get(GeminiService)));
+  console.log('Services registered successfully');
+} catch (error) {
+  console.error('Failed to register services:', error);
+  process.exit(1);
+}
 
 useContainer(Container);
 
-// Register controllers
-Container.set(ArticleController, new ArticleController(
-  Container.get(ArticleService),
-  Container.get(UserService)
-));
-Container.set(UserController, new UserController(
-  Container.get(UserService)
-));
+// Register controllers with error handling
+try {
+  Container.set(ArticleController, new ArticleController(
+    Container.get(ArticleService),
+    Container.get(UserService)
+  ));
+  Container.set(UserController, new UserController(
+    Container.get(UserService)
+  ));
+  console.log('Controllers registered successfully');
+} catch (error) {
+  console.error('Failed to register controllers:', error);
+  process.exit(1);
+}
 
 const authorizationChecker = async (action: Action, roles: string[]) => {
   // Example: check for sessionToken cookie
@@ -67,13 +95,19 @@ const authorizationChecker = async (action: Action, roles: string[]) => {
 };
 
 // Setup routing-controllers with proper container
-useExpressServer(app, {
-  controllers: [ArticleController, UserController],
-  validation: true,
-  classTransformer: true,
-  defaultErrorHandler: false,
-  authorizationChecker: authorizationChecker
-});
+try {
+  useExpressServer(app, {
+    controllers: [ArticleController, UserController],
+    validation: true,
+    classTransformer: true,
+    defaultErrorHandler: false,
+    authorizationChecker: authorizationChecker
+  });
+  console.log('Routing controllers configured successfully');
+} catch (error) {
+  console.error('Failed to setup routing controllers:', error);
+  process.exit(1);
+}
 
 // Custom error handler
 const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
@@ -99,6 +133,28 @@ app.use(errorHandler);
 const port = parseInt(process.env.PORT || '5001', 10);
 const host = process.env.HOST || '0.0.0.0';
 
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+// Start server with error handling
 server.listen(port, host, () => {
   console.log(`Server is running on host ${host} port ${port}`);
+  console.log(`Health check available at http://${host}:${port}/health`);
+}).on('error', (error) => {
+  console.error('Server failed to start:', error);
+  process.exit(1);
 }); 
