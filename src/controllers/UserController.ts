@@ -65,14 +65,15 @@ export class UserController {
 
   @Post('/loginWithGoogle')
   async loginWithGoogle(@Body() body: { token: string, provider: string }, @Res() res: Response) {
+    console.log("In user controller, loginWithGoogle, body is:", body)
     const { token, provider } = body;
     const { result, sessionToken } = await this.userService.loginWithGoogle(token, provider);
-    console.log("sessionToken", sessionToken)
+    console.log("sessionToken in loginWithGoogle", sessionToken)
     res.cookie('sessionToken', sessionToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        sameSite: 'strict'
+        sameSite: 'none',
       });
     return { success: true, user: result };
   }
@@ -90,7 +91,7 @@ export class UserController {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        sameSite: 'strict'
+        sameSite: 'none'
       });
 
       return {
