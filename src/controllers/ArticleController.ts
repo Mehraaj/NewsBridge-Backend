@@ -42,7 +42,7 @@ export class ArticleController {
 // Get fresh articles from the News API
 @Get('/fresh')
 //@UseBefore(AuthMiddleware) //QUESTION. If this is present, then the auth middleware is called but fails because it cannot see cookies, but randomly on the 4th try it does see cookies, but still fails, and then continues to not see cookies. Results FAIL
-@Authorized()
+//@Authorized()
 async getFreshArticles(
   @Body() filters: ArticleFilters, 
   @QueryParam('offset') offset: number, 
