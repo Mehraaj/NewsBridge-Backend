@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.mp4
+*.avi
+*.mov
+temp/ 
+
+/node_modules
+/dist
+/generated
+/temp
+/node_modules
+/npm-debug.log*
+/yarn-debug.log*
+/yarn-error.log*
+/pnpm-debug.log*
+/.pnpm-debug.log*

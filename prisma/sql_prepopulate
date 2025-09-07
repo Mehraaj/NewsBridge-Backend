@@ -1,0 +1,190 @@
+-- DROP TABLES IN REVERSE DEPENDENCY ORDER
+DROP TABLE IF EXISTS article_entities;
+DROP TABLE IF EXISTS entities;
+DROP TABLE IF EXISTS article_tags;
+DROP TABLE IF EXISTS tags;
+DROP TABLE IF EXISTS geo_events;
+DROP TABLE IF EXISTS weekly_forecasts;
+DROP TABLE IF EXISTS bookmarks;
+DROP TABLE IF EXISTS bookmark_folders;
+DROP TABLE IF EXISTS likes;
+DROP TABLE IF EXISTS views;
+DROP TABLE IF EXISTS articles CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS sessions CASCADE;
+
+-- USERS (linked to Supabase Auth)
+CREATE TABLE users (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT UNIQUE,
+  email TEXT,
+  password TEXT,
+  preferences JSONB,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  last_active TIMESTAMPTZ
+);
+
+
+-- ARTICLES
+CREATE TABLE articles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source TEXT,
+  title TEXT,
+  url TEXT UNIQUE,
+  image_url TEXT,
+  published_at TIMESTAMPTZ,
+  category TEXT,
+  author TEXT,
+  content TEXT,
+  summary TEXT,
+  lat DOUBLE PRECISION,
+  lng DOUBLE PRECISION,
+  location_name TEXT,        -- e.g., "Gaza, Palestine"
+  sentiment sentiment_type,
+  significance TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ARTICLE TAGS (searchable metadata)
+CREATE TABLE tags (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT UNIQUE
+);
+
+CREATE TABLE article_tags (
+  article_id UUID REFERENCES articles(id) ON DELETE CASCADE,
+  tag_id BIGINT REFERENCES tags(id) ON DELETE CASCADE,
+  PRIMARY KEY (article_id, tag_id)
+);
+
+-- USER VIEWING HISTORY
+CREATE TABLE sessions (
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  token TEXT,
+  expires TIMESTAMPTZ,
+  PRIMARY KEY (user_id)
+);
+
+-- USER VIEWING HISTORY
+CREATE TABLE views (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  article_id UUID REFERENCES articles(id) ON DELETE CASCADE,
+  viewed_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- USER LIKES
+CREATE TABLE likes (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  article_id UUID REFERENCES articles(id) ON DELETE CASCADE,
+  liked_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, article_id)
+);
+
+-- BOOKMARK FOLDERS (Standard + Custom)
+CREATE TABLE bookmark_folders (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT,
+  is_standard BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, name)
+);
+
+-- USER BOOKMARKS (folder optional)
+CREATE TABLE bookmarks (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  article_id UUID REFERENCES articles(id) ON DELETE CASCADE,
+  folder_id BIGINT REFERENCES bookmark_folders(id) ON DELETE SET NULL,
+  bookmarked_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, article_id)
+);
+
+-- ENTITY EXTRACTION (for context/tagging)
+CREATE TABLE entities (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  type TEXT NOT NULL, -- e.g., PERSON, ORG, LOCATION
+  description TEXT,
+  wiki_url TEXT DEFAULT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE article_entities (
+  article_id UUID REFERENCES articles(id) ON DELETE CASCADE,
+  entity_id BIGINT REFERENCES entities(id) ON DELETE CASCADE,
+  PRIMARY KEY (article_id, entity_id)
+);
+
+-- WEEKLY FORECASTS
+CREATE TABLE weekly_forecasts (
+  id BIGSERIAL PRIMARY KEY,
+  week_start DATE UNIQUE,
+  generated_at TIMESTAMPTZ DEFAULT now(),
+  content TEXT
+);
+
+-- GEO-ENABLED MAP LAYERS FOR EVENTS (pre-aggregated for fast zoom levels)
+CREATE TABLE geo_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  article_id UUID REFERENCES articles(id) ON DELETE CASCADE,
+  lat DOUBLE PRECISION,
+  lng DOUBLE PRECISION,
+  zoom_level INT, -- 1 to 20, for map zoom rendering
+  label TEXT UNIQUE,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX ON geo_events (zoom_level, lat, lng);
+
+-- SEED DATA (REQUIRES REAL auth.users UUIDS)
+-- Replace with actual UUIDs from Supabase Auth users table
+INSERT INTO users (id, name, email, password, preferences, last_active)
+VALUES
+  ('96bd41dd-be6e-476b-8331-94075bbcfa86', 'Alice Doe', 'alice@example.com', 'admin', '["technology", "world"]', now()),
+  ('59ff0e7e-2953-47c6-851e-57a9f9bb0ca2', 'Bob Smith', 'bob@example.com', 'admin', '["politics", "science"]', now());
+
+INSERT INTO articles (id, source, title, url, image_url, published_at, category, author, content, summary, lat, lng, location_name)
+VALUES
+  ('a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1', 'BBC News', 'AI Breakthrough in Drug Discovery', 'https://news.example.com/ai-drug', 'https://img.example.com/ai.jpg', now(), 'science', 'Jane Doe', 'A major breakthrough in AI-driven drug discovery...', 'AI helps identify new antibiotics.', 51.5072, -0.1276, 'London, UK'),
+  ('b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2', 'Reuters', 'Tensions Rise in Taiwan Strait', 'https://news.example.com/taiwan', 'https://img.example.com/taiwan.jpg', now(), 'world', 'John Lee', 'Increased military activity in the Taiwan Strait...', 'Tensions with China rise.', 25.0330, 121.5654, 'Taipei, Taiwan');
+
+INSERT INTO tags (name) VALUES ('AI'), ('China'), ('Geopolitics');
+
+INSERT INTO article_tags (article_id, tag_id)
+VALUES
+  ('a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1', 1),
+  ('b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2', 2),
+  ('b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2', 3);
+
+INSERT INTO views (user_id, article_id) VALUES
+  ('96bd41dd-be6e-476b-8331-94075bbcfa86', 'a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1'),
+  ('59ff0e7e-2953-47c6-851e-57a9f9bb0ca2', 'b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2');
+
+INSERT INTO likes (user_id, article_id) VALUES
+  ('96bd41dd-be6e-476b-8331-94075bbcfa86', 'a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1');
+
+INSERT INTO bookmark_folders (user_id, name, is_standard) VALUES
+  ('96bd41dd-be6e-476b-8331-94075bbcfa86', 'Tech', TRUE),
+  ('59ff0e7e-2953-47c6-851e-57a9f9bb0ca2', 'Geopolitics', TRUE);
+
+INSERT INTO bookmarks (user_id, article_id, folder_id) VALUES
+  ('96bd41dd-be6e-476b-8331-94075bbcfa86', 'a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1', 1),
+  ('59ff0e7e-2953-47c6-851e-57a9f9bb0ca2', 'b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2', 2);
+
+INSERT INTO entities (name, type, description, wiki_url) VALUES
+  ('Artificial Intelligence', 'TECHNOLOGY', 'The simulation of human intelligence by machines.', 'https://en.wikipedia.org/wiki/Artificial_intelligence'),
+  ('Taiwan', 'LOCATION', 'A country in East Asia.', 'https://en.wikipedia.org/wiki/Taiwan');
+
+INSERT INTO article_entities (article_id, entity_id) VALUES
+  ('a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1', 1),
+  ('b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2', 2);
+
+INSERT INTO weekly_forecasts (week_start, content) VALUES
+  (current_date, 'Expect developments in AI legislation and rising tensions in Asia.');
+
+INSERT INTO geo_events (article_id, lat, lng, zoom_level, label) VALUES
+  ('a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1', 51.5072, -0.1276, 5, 'AI Lab in London'),
+  ('b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2', 25.0330, 121.5654, 5, 'Military Activity in Taiwan');
