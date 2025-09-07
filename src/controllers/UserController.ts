@@ -75,7 +75,7 @@ export class UserController {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         sameSite: 'none',
       });
-    return { success: true, user: result };
+    return { success: true, user: result, sessionToken: sessionToken };
   }
 
   @Post('/login')
@@ -96,7 +96,8 @@ export class UserController {
 
       return {
         success: true,
-        user
+        user,
+        sessionToken: token
       };
     } catch (error: unknown) {
       const apiError = error as ApiError;
