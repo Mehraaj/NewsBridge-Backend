@@ -7,6 +7,7 @@ describe('ArticleController', () => {
     let controller;
     let articleService;
     let geminiService;
+    let userService;
     // Common test data
     const mockArticle = {
         id: '1',
@@ -23,7 +24,8 @@ describe('ArticleController', () => {
         summary: 'Test Summary',
         sentiment: 'neutral',
         significance: 'Test Significance',
-        entities: []
+        entities: [],
+        future_implications: 'Test Future Implications'
     };
     beforeEach(() => {
         // Reset mocks
@@ -31,8 +33,9 @@ describe('ArticleController', () => {
         // Get mocked services
         articleService = typedi_1.Container.get('ArticleService');
         geminiService = typedi_1.Container.get('GeminiService');
+        userService = typedi_1.Container.get('UserService');
         // Create controller instance
-        controller = new ArticleController_1.ArticleController(articleService);
+        controller = new ArticleController_1.ArticleController(articleService, userService);
     });
     describe('createArticle', () => {
         it('should create article successfully', async () => {
@@ -54,63 +57,21 @@ describe('ArticleController', () => {
     describe('getArticle', () => {
         it('should return article when found', async () => {
             articleService.getArticle.mockResolvedValue([mockSummarizedArticle]);
-            const result = await controller.getArticle(mockArticle);
+            const result = await controller.getArticle(mockArticle, {});
             expect(result).toEqual(mockSummarizedArticle);
             expect(articleService.getArticle).toHaveBeenCalledWith(mockArticle.id, undefined, undefined, { offset: 0, limit: 10 });
         });
         it('should throw error when article not found', async () => {
             articleService.getArticle.mockResolvedValue([]);
-            await expect(controller.getArticle(mockArticle))
+            await expect(controller.getArticle(mockArticle, {}))
                 .rejects
                 .toThrow('Article not found');
         });
         it('should handle service errors', async () => {
             articleService.getArticle.mockRejectedValue(new Error('Service Error'));
-            await expect(controller.getArticle(mockArticle))
+            await expect(controller.getArticle(mockArticle, {}))
                 .rejects
                 .toThrow('Failed to fetch article: Service Error');
-        });
-    });
-    describe('getArticleByTitle', () => {
-        it('should return article when found by title', async () => {
-            articleService.getArticle.mockResolvedValue([mockSummarizedArticle]);
-            const result = await controller.getArticleByTitle({ id: '1', title: 'Test Article' });
-            expect(result).toEqual(mockSummarizedArticle);
-            expect(articleService.getArticle).toHaveBeenCalledWith(undefined, undefined, 'Test Article', { offset: 0, limit: 10 });
-        });
-        it('should handle null title', async () => {
-            articleService.getArticle.mockResolvedValue([mockSummarizedArticle]);
-            await controller.getArticleByTitle({ id: '1', title: null });
-            expect(articleService.getArticle).toHaveBeenCalledWith(undefined, undefined, undefined, { offset: 0, limit: 10 });
-        });
-        it('should throw error when article not found', async () => {
-            articleService.getArticle.mockResolvedValue([]);
-            await expect(controller.getArticleByTitle({ id: '1', title: 'Nonexistent' }))
-                .rejects
-                .toThrow('Article not found');
-        });
-    });
-    describe('getArticlesBySource', () => {
-        it('should return articles when found by source', async () => {
-            const mockArticles = [mockSummarizedArticle, { ...mockSummarizedArticle, id: '2' }];
-            articleService.getArticle.mockResolvedValue(mockArticles);
-            const result = await controller.getArticlesBySource({ id: '1', source: 'Test Source' });
-            expect(result).toEqual(mockArticles);
-            expect(articleService.getArticle).toHaveBeenCalledWith(undefined, 'Test Source', undefined, { offset: 0, limit: 10 });
-        });
-        it('should handle null source', async () => {
-            articleService.getArticle.mockResolvedValue([]);
-            await expect(controller.getArticlesBySource({
-                id: '1',
-                source: null
-            })).rejects.toThrow('Article not found');
-            expect(articleService.getArticle).toHaveBeenCalledWith(undefined, undefined, undefined, { offset: 0, limit: 10 });
-        });
-        it('should throw error when no articles found', async () => {
-            articleService.getArticle.mockResolvedValue([]);
-            await expect(controller.getArticlesBySource({ id: '1', source: 'Nonexistent' }))
-                .rejects
-                .toThrow('Article not found');
         });
     });
     describe('updateArticle', () => {

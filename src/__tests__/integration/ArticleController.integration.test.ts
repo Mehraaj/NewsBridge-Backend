@@ -7,6 +7,7 @@ import { useExpressServer, useContainer } from 'routing-controllers';
 import { ArticleController } from '../../controllers/ArticleController';
 import { ArticleService } from '../../services/ArticleService';
 import { GeminiService } from '../../services/ai/GeminiService';
+import { UserService } from '../../services/UserService';
 import { IdentifiedArticle } from '../../types/article.types';
 import prisma from '../../utils/prisma';
 import 'dotenv/config';
@@ -25,16 +26,16 @@ describe('Simple Article Tests', () => {
       throw error;
     }
 
-    // Create and register services
+    // Create and register services - fix variable order
+    const geminiService = new GeminiService('test-api-key');
     const articleService = new ArticleService(geminiService);
-    const geminiService = new GeminiService('test-api-key', articleService);
-    
     
     Container.set(GeminiService, geminiService);
     Container.set(ArticleService, articleService);
+    Container.set(UserService, {} as any); // Mock UserService for this test
 
-    // Create and register controller
-    const controller = new ArticleController(articleService, geminiService);
+    // Create and register controller - ArticleController expects (ArticleService, UserService)
+    const controller = new ArticleController(articleService, {} as any);
     Container.set(ArticleController, controller);
 
     // Setup Express app

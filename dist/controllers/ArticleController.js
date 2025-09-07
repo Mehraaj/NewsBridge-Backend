@@ -16,9 +16,11 @@ exports.ArticleController = void 0;
 const ArticleService_1 = require("../services/ArticleService");
 const routing_controllers_1 = require("routing-controllers");
 const typedi_1 = require("typedi");
+const UserService_1 = require("../services/UserService");
 let ArticleController = class ArticleController {
-    constructor(articleService) {
+    constructor(articleService, userService) {
         this.articleService = articleService;
+        this.userService = userService;
         // Add this to verify the service is injected
         console.log('ArticleController constructed with service:', !!this.articleService);
     }
@@ -34,7 +36,20 @@ let ArticleController = class ArticleController {
         }
     }
     // Get fresh articles from the News API
-    async getFreshArticles(filters, offset, limit) {
+    async getFreshArticles(filters, offset, limit, req) {
+        //QUESTION: If this is present, then the auth middleware is running but cannot see where it is being called. But Results WORK. 
+        // //check if the user is authenticated
+        // const user = await this.userService.getUserBySessionToken(req.cookies.sessionToken);
+        // console.log("Got user session token:", req.cookies.sessionToken);
+        // if (!user) {
+        //   throw new Error('User not found');
+        // }
+        //search may be in query param, so add it to filters 
+        console.log("article controller search term", filters.search);
+        console.log("article controller category", filters.category);
+        console.log("article controller offset", offset);
+        console.log("article controller limit", limit);
+        //filters.search = search;
         console.log('Received filters:', filters);
         if (offset === undefined) {
             offset = 0;
@@ -43,12 +58,14 @@ let ArticleController = class ArticleController {
             limit = 10;
         }
         const paginate = { offset, limit };
-        return await this.articleService.fetchArticles(filters, paginate);
+        await this.articleService.fetchArticles(filters, paginate);
+        console.log('Fetched articles and stored in db, now fetching from db');
+        return await this.articleService.getFilteredArticles(filters, paginate);
     }
     // Get article by ID - for summarized articles 
-    async getArticle(article) {
+    async getArticle(article, req) {
         try {
-            console.log('Received article request:', article);
+            //console.log('Received article request:', article);
             console.log('Article ID:', article.id);
             // Add this log to see what's happening before the service call
             console.log('About to call articleService.getArticle');
@@ -57,9 +74,25 @@ let ArticleController = class ArticleController {
                 limit: 10
             });
             // Add this log to see what we got back
-            console.log('Articles returned from service:', articles);
+            //console.log('Articles returned from service:', articles);
             if (!articles || articles.length === 0) {
                 throw new Error('Article not found');
+            }
+            // Try to mark down that the user has fetched the article, but don't fail if session is invalid
+            try {
+                const user = await this.userService.getUserBySessionToken(req.cookies.sessionToken);
+                console.log("Got user session token:", req.cookies.sessionToken);
+                if (user) {
+                    await this.userService.addUserViewHistory(user.id, articles[0].id);
+                    console.log("added user view history");
+                }
+                else {
+                    console.log("No user found, skipping view history");
+                }
+            }
+            catch (sessionError) {
+                console.log("Session validation failed, skipping view history:", sessionError);
+                // Continue without adding view history
             }
             return articles[0];
         }
@@ -68,41 +101,8 @@ let ArticleController = class ArticleController {
             throw new Error(`Failed to fetch article: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
-    // Get article by title
-    async getArticleByTitle(article) {
-        try {
-            const { id, title, source } = article;
-            const articles = await this.articleService.getArticle(undefined, undefined, title ?? undefined, {
-                offset: 0,
-                limit: 10
-            });
-            if (!articles || articles.length === 0) {
-                throw new Error('Article not found');
-            }
-            return articles[0];
-        }
-        catch (error) {
-            console.error('Error fetching article:', error);
-            throw new Error(`Failed to fetch article: ${error instanceof Error ? error.message : String(error)}`);
-        }
-    }
-    // Get articles by source
-    async getArticlesBySource(article) {
-        try {
-            const { source } = article;
-            const articles = await this.articleService.getArticle(undefined, source ?? undefined, undefined, {
-                offset: 0,
-                limit: 10
-            });
-            if (!articles || articles.length === 0) {
-                throw new Error('Article not found');
-            }
-            return articles;
-        }
-        catch (error) {
-            console.error('Error fetching articles:', error);
-            throw new Error(`Failed to fetch articles: ${error instanceof Error ? error.message : String(error)}`);
-        }
+    async getDBArticles(filters, offset, limit) {
+        return await this.articleService.getFilteredArticles(filters, { offset, limit });
     }
     // Update article  
     async updateArticle(article) {
@@ -116,6 +116,49 @@ let ArticleController = class ArticleController {
             throw new Error(`Failed to update article: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
+    async webScrapeArticle(url) {
+        return await this.articleService.webScrapeArticle(url);
+    }
+    // Get articles for map view
+    async getMapArticles(request) {
+        try {
+            console.log('MapController: Received map request:', request);
+            // Validate bounds
+            if (!request.bounds ||
+                typeof request.bounds.north !== 'number' ||
+                typeof request.bounds.south !== 'number' ||
+                typeof request.bounds.east !== 'number' ||
+                typeof request.bounds.west !== 'number') {
+                throw new Error('Invalid bounds provided');
+            }
+            // Validate zoom
+            if (typeof request.zoom !== 'number' || request.zoom < 0 || request.zoom > 20) {
+                throw new Error('Invalid zoom level provided');
+            }
+            let res = null;
+            if (request.search === "" || request.search === undefined) {
+                const result = await this.articleService.getMapArticles(request.bounds, request.zoom, request.category, request.limit || 100, request.offset || 0);
+                res = result;
+            }
+            else {
+                const result = await this.articleService.getMapArticles(request.bounds, request.zoom, request.category, request.limit || 100, request.offset || 0, request.search);
+                res = result;
+            }
+            console.log('MapController: Returning articles:', res.articles.length);
+            if (res === null) {
+                throw new Error('No articles found');
+            }
+            return res;
+        }
+        catch (error) {
+            console.error('Error fetching map articles:', error);
+            // Return a proper error response instead of throwing
+            return {
+                articles: [],
+                total: 0
+            };
+        }
+    }
 };
 exports.ArticleController = ArticleController;
 __decorate([
@@ -127,35 +170,35 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], ArticleController.prototype, "createArticle", null);
 __decorate([
-    (0, routing_controllers_1.Get)('/fresh'),
+    (0, routing_controllers_1.Get)('/fresh')
+    //@UseBefore(AuthMiddleware) //QUESTION. If this is present, then the auth middleware is called but fails because it cannot see cookies, but randomly on the 4th try it does see cookies, but still fails, and then continues to not see cookies. Results FAIL
+    ,
+    (0, routing_controllers_1.Authorized)(),
+    __param(0, (0, routing_controllers_1.Body)()),
+    __param(1, (0, routing_controllers_1.QueryParam)('offset')),
+    __param(2, (0, routing_controllers_1.QueryParam)('limit')),
+    __param(3, (0, routing_controllers_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Number, Number, Object]),
+    __metadata("design:returntype", Promise)
+], ArticleController.prototype, "getFreshArticles", null);
+__decorate([
+    (0, routing_controllers_1.Get)('/'),
+    __param(0, (0, routing_controllers_1.Body)()),
+    __param(1, (0, routing_controllers_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], ArticleController.prototype, "getArticle", null);
+__decorate([
+    (0, routing_controllers_1.Get)('/db'),
     __param(0, (0, routing_controllers_1.Body)()),
     __param(1, (0, routing_controllers_1.QueryParam)('offset')),
     __param(2, (0, routing_controllers_1.QueryParam)('limit')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object, Number, Number]),
     __metadata("design:returntype", Promise)
-], ArticleController.prototype, "getFreshArticles", null);
-__decorate([
-    (0, routing_controllers_1.Get)('/'),
-    __param(0, (0, routing_controllers_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], ArticleController.prototype, "getArticle", null);
-__decorate([
-    (0, routing_controllers_1.Get)('/title'),
-    __param(0, (0, routing_controllers_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], ArticleController.prototype, "getArticleByTitle", null);
-__decorate([
-    (0, routing_controllers_1.Get)('/source'),
-    __param(0, (0, routing_controllers_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], ArticleController.prototype, "getArticlesBySource", null);
+], ArticleController.prototype, "getDBArticles", null);
 __decorate([
     (0, routing_controllers_1.Put)('/'),
     __param(0, (0, routing_controllers_1.Body)()),
@@ -163,11 +206,28 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], ArticleController.prototype, "updateArticle", null);
+__decorate([
+    (0, routing_controllers_1.Get)('/webscrape'),
+    __param(0, (0, routing_controllers_1.QueryParam)('url')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ArticleController.prototype, "webScrapeArticle", null);
+__decorate([
+    (0, routing_controllers_1.Post)('/map'),
+    (0, routing_controllers_1.HttpCode)(200),
+    __param(0, (0, routing_controllers_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], ArticleController.prototype, "getMapArticles", null);
 exports.ArticleController = ArticleController = __decorate([
     (0, routing_controllers_1.JsonController)('/articles'),
     (0, typedi_1.Service)('ArticleController'),
     __param(0, (0, typedi_1.Inject)('ArticleService')),
-    __metadata("design:paramtypes", [ArticleService_1.ArticleService])
+    __param(1, (0, typedi_1.Inject)('UserService')),
+    __metadata("design:paramtypes", [ArticleService_1.ArticleService,
+        UserService_1.UserService])
 ], ArticleController);
 //   // Delete article
 //   @Delete('/:id')

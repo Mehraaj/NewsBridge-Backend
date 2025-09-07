@@ -11,6 +11,7 @@ const routing_controllers_1 = require("routing-controllers");
 const ArticleController_1 = require("../../controllers/ArticleController");
 const ArticleService_1 = require("../../services/ArticleService");
 const GeminiService_1 = require("../../services/ai/GeminiService");
+const UserService_1 = require("../../services/UserService");
 const prisma_1 = __importDefault(require("../../utils/prisma"));
 require("dotenv/config");
 describe('Simple Article Tests', () => {
@@ -26,13 +27,14 @@ describe('Simple Article Tests', () => {
             console.error('Failed to connect to test database:', error);
             throw error;
         }
-        // Create and register services
+        // Create and register services - fix variable order
+        const geminiService = new GeminiService_1.GeminiService('test-api-key');
         const articleService = new ArticleService_1.ArticleService(geminiService);
-        const geminiService = new GeminiService_1.GeminiService('test-api-key', articleService);
         typedi_1.Container.set(GeminiService_1.GeminiService, geminiService);
         typedi_1.Container.set(ArticleService_1.ArticleService, articleService);
-        // Create and register controller
-        const controller = new ArticleController_1.ArticleController(articleService, geminiService);
+        typedi_1.Container.set(UserService_1.UserService, {}); // Mock UserService for this test
+        // Create and register controller - ArticleController expects (ArticleService, UserService)
+        const controller = new ArticleController_1.ArticleController(articleService, {});
         typedi_1.Container.set(ArticleController_1.ArticleController, controller);
         // Setup Express app
         (0, routing_controllers_1.useContainer)(typedi_1.Container);

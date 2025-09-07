@@ -9,17 +9,21 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.validateSession = exports.AuthMiddleware = void 0;
+exports.AuthMiddleware = void 0;
 const typedi_1 = require("typedi");
 const UserService_1 = require("../services/UserService");
+const routing_controllers_1 = require("routing-controllers");
 let AuthMiddleware = class AuthMiddleware {
     constructor(userService) {
         this.userService = userService;
     }
     async use(req, res, next) {
+        console.log("AuthMiddleware use called");
+        console.log("Cookies:", req.cookies);
         const token = req.cookies.sessionToken;
+        console.log("*****************SESSION TOKEN*****************", token);
         if (!token) {
-            return res.redirect('/login');
+            throw new routing_controllers_1.UnauthorizedError('No session token provided');
         }
         try {
             const user = await this.userService.validateSession(token);
@@ -28,9 +32,16 @@ let AuthMiddleware = class AuthMiddleware {
             next();
         }
         catch (error) {
-            // Clear invalid session cookie
-            res.clearCookie('sessionToken');
-            return res.redirect('/login');
+            console.log("error in auth middleware", error);
+            // Only clear cookie for actual authentication failures, not temporary service issues
+            if (error instanceof routing_controllers_1.UnauthorizedError) {
+                const isTemporaryError = error.message.includes('temporarily unavailable');
+                if (!isTemporaryError) {
+                    // Clear invalid session cookie only for actual auth failures
+                    res.clearCookie('sessionToken');
+                }
+            }
+            throw error;
         }
     }
 };
@@ -39,8 +50,3 @@ exports.AuthMiddleware = AuthMiddleware = __decorate([
     (0, typedi_1.Service)(),
     __metadata("design:paramtypes", [UserService_1.UserService])
 ], AuthMiddleware);
-// Export a function for use with @UseBefore decorator
-const validateSession = () => {
-    return AuthMiddleware;
-};
-exports.validateSession = validateSession;

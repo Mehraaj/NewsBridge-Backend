@@ -45,25 +45,31 @@ let UserController = class UserController {
             return { success: false, error: apiError.message };
         }
     }
-    async loginUser(credentials) {
+    async loginWithGoogle(body, res) {
+        const { token, provider } = body;
+        const { result, sessionToken } = await this.userService.loginWithGoogle(token, provider);
+        console.log("sessionToken", sessionToken);
+        res.cookie('sessionToken', sessionToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+            sameSite: 'strict'
+        });
+        return { success: true, user: result };
+    }
+    async loginUser(credentials, res) {
         try {
             const { token, user } = await this.userService.loginUser(credentials.email, credentials.password);
             // Set the session token as a cookie
-            // Note: In your Express app setup, you'll need to configure cookie-parser
-            // and set appropriate cookie options (httpOnly, secure, etc.)
+            res.cookie('sessionToken', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+                sameSite: 'strict'
+            });
             return {
                 success: true,
-                user,
-                cookie: {
-                    name: 'sessionToken',
-                    value: token,
-                    options: {
-                        httpOnly: true,
-                        secure: process.env.NODE_ENV === 'production',
-                        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-                        sameSite: 'strict'
-                    }
-                }
+                user
             };
         }
         catch (error) {
@@ -81,6 +87,26 @@ let UserController = class UserController {
             return { success: false, error: apiError.message };
         }
     }
+    async getCurrentSession(token) {
+        try {
+            console.log("In user controller, getCurrentSession, token is:", token);
+            const user = await this.userService.validateSession(token);
+            console.log("In user controller, getCurrentSession, user is:", user);
+            return {
+                success: true,
+                user: {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email
+                }
+            };
+        }
+        catch (error) {
+            const apiError = error;
+            console.log("In user controller, getCurrentSession, error is:", apiError);
+            throw new routing_controllers_1.UnauthorizedError('Invalid or expired session');
+        }
+    }
 };
 exports.UserController = UserController;
 __decorate([
@@ -92,7 +118,7 @@ __decorate([
 ], UserController.prototype, "createUser", null);
 __decorate([
     (0, routing_controllers_1.Put)('/profile'),
-    (0, routing_controllers_1.UseBefore)(auth_1.validateSession),
+    (0, routing_controllers_1.UseBefore)(auth_1.AuthMiddleware),
     __param(0, (0, routing_controllers_1.CookieParam)('sessionToken')),
     __param(1, (0, routing_controllers_1.Body)()),
     __metadata("design:type", Function),
@@ -100,20 +126,36 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], UserController.prototype, "updateUser", null);
 __decorate([
+    (0, routing_controllers_1.Post)('/loginWithGoogle'),
+    __param(0, (0, routing_controllers_1.Body)()),
+    __param(1, (0, routing_controllers_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], UserController.prototype, "loginWithGoogle", null);
+__decorate([
     (0, routing_controllers_1.Post)('/login'),
     __param(0, (0, routing_controllers_1.Body)()),
+    __param(1, (0, routing_controllers_1.Res)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], UserController.prototype, "loginUser", null);
 __decorate([
     (0, routing_controllers_1.Get)('/:username'),
-    (0, routing_controllers_1.UseBefore)((0, auth_1.validateSession)()),
+    (0, routing_controllers_1.UseBefore)(auth_1.AuthMiddleware),
     __param(0, (0, routing_controllers_1.Param)('username')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], UserController.prototype, "getUser", null);
+__decorate([
+    (0, routing_controllers_1.Get)('/current-session'),
+    __param(0, (0, routing_controllers_1.CookieParam)('sessionToken')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], UserController.prototype, "getCurrentSession", null);
 exports.UserController = UserController = __decorate([
     (0, routing_controllers_1.JsonController)('/users'),
     (0, typedi_1.Service)(),

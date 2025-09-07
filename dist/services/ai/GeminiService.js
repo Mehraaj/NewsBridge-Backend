@@ -24,7 +24,7 @@ let GeminiService = class GeminiService {
     }
     async analyzeArticle(article) {
         //Short hand instead of doing article.source, article.title, article.content, article.category
-        const { source, title, content, category } = article;
+        let { source, title, content, category } = article;
         if (!content) {
             //DO not tthrow error, just return article as is 
             console.log('SUMMARIZATION FAILED: Article content is required for analysis');
@@ -33,7 +33,8 @@ let GeminiService = class GeminiService {
                 summary: null,
                 significance: null,
                 sentiment: null,
-                entities: null
+                entities: null,
+                future_implications: null
             };
         }
         const prompt = `
@@ -46,16 +47,21 @@ let GeminiService = class GeminiService {
       {
         "title": "exact article title",
         "summary": "7-8 sentence summary of the key points",
+        "future_implications": "3-4 sentences of what to look out for in the future based on this article. This can be potential impacts, opportunities, people to watch, etc. Imagine these are bullet point items. Separate each item with a new line.",
         "significance": "7-8 sentence analysis of why this matters and future implications",
         "sentiment": "sentiment of the article",
         "entities": [
           {
             "name": "entity name",
-            "type": "PERSON/ORG/EVENT",
+            "type": "PERSON/ORG/EVENT/PRODUCT",
             "description": "brief description of entity's role/relevance"
           }
         ],
-        "location": "location of the article or null if not described"
+        "location_name": "location of the article. If not mentioned, give your best guess based on the content",
+        "lat" : "latitude of the location of the article. If not mentioned, give your best guess based on the content",
+        "lng" : "longitude of the location of the article. If not mentioned, give your best guess based on the content",
+        "category": "category of the article. Can only be one of the following: 'Politics', 'Business', 'Technology', 'Science', 'Health', 'Entertainment', 'Sports', 'Crime', 'Weather', 'Travel', 'Other'",
+
       }
 
       Ensure the summary and significance sections are thorough but concise.
@@ -73,6 +79,7 @@ let GeminiService = class GeminiService {
             throw new Error('Failed to detect JSON in response');
         try {
             const analysis = JSON.parse(match[0]);
+            console.log('Article title and content:', article.title, article.content?.substring(0, 500));
             const base_article = {
                 ...article,
                 summary: analysis.summary,
@@ -82,7 +89,12 @@ let GeminiService = class GeminiService {
                     type: entity.type,
                     description: entity.description
                 })),
-                sentiment: analysis.sentiment
+                sentiment: analysis.sentiment,
+                category: analysis.category,
+                lat: analysis.lat,
+                lng: analysis.lng,
+                location_name: analysis.location_name,
+                future_implications: analysis.future_implications
             };
             const enhanced_article = await this.enhanceArticle(base_article);
             //Error handling if function throws an error 
