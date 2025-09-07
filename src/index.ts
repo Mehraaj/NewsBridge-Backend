@@ -18,10 +18,30 @@ dotenv.config();
 const app = express();
 
 // Enable CORS
+const allowedOrigins = [
+  'http://localhost:3001',  // Development frontend
+  'https://news-bridge-frontend.vercel.app',  // Production frontend
+  'https://newsbridge.vercel.app',  // Production frontend
+  //production backend
+  'https://newsbridge-backend.vercel.app',
+  // Add any additional origins from environment variable
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : [])
+];
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL ||  'http://localhost:3001',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true  // Important for cookies
 }));
 
