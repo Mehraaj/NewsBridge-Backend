@@ -24,6 +24,7 @@ const allowedOrigins = [
   'https://newsbridge.vercel.app',  // Production frontend
   //production backend
   'https://newsbridge-backend.vercel.app',
+  'https://practical-patience-production.up.railway.app',
   // Add any additional origins from environment variable
   ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : [])
 ];
