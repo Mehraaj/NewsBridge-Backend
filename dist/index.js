@@ -82,7 +82,8 @@ const errorHandler = (err, req, res, next) => {
     });
 };
 app.use(errorHandler);
-const port = process.env.PORT || 5001;
-server.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+const port = parseInt(process.env.PORT || '5001', 10);
+const host = process.env.HOST || '0.0.0.0';
+server.listen(port, host, () => {
+    console.log(`Server is running on host ${host} port ${port}`);
 });
