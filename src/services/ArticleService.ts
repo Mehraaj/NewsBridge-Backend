@@ -546,7 +546,10 @@ export class ArticleService {
     });
 
     console.log('got from DB articles:', articles.length);
-
+    
+    //sort articles by published_at descending
+    articles.sort((a, b) => (b.published_at?.getTime() || 0) - (a.published_at?.getTime() || 0));
+    
     return { 
       articles: articles.map(a => this.serializeArticle({
         ...a, 
